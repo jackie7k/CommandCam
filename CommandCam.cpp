@@ -1,28 +1,28 @@
 //
 // CommandCam - A command line image grabber
-// Copyright (C) 2012 Ted Burke
+// Copyright (C) 2012-2013 Ted Burke
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program (see the file "COPYING").
 // If not, see <http://www.gnu.org/licenses/>.
-// 
-// Website: http://batchloaf.wordpress.com
+//
+// Website: https://batchloaf.wordpress.com
 //
 // To compile using the MSVC++ compiler:
 //
 //		cl CommandCam.cpp ole32.lib strmiids.lib oleaut32.lib
 //
-// Last modified 21-4-2012
+// Last modified 24-1-2013
 //
 
 // DirectShow header file
@@ -68,10 +68,10 @@ void exit_message(const char* error_message, int error)
 	// Print an error message
 	fprintf(stderr, error_message);
 	fprintf(stderr, "\n");
-	
+
 	// Clean up DirectShow / COM stuff
 	if (pBuffer != NULL) delete[] pBuffer;
-	if (pMediaControl != NULL) pMediaControl->Release();	
+	if (pMediaControl != NULL) pMediaControl->Release();
 	if (pNullRenderer != NULL) pNullRenderer->Release();
 	if (pSampleGrabber != NULL) pSampleGrabber->Release();
 	if (pSampleGrabberFilter != NULL)
@@ -84,7 +84,7 @@ void exit_message(const char* error_message, int error)
 	if (pEnum != NULL) pEnum->Release();
 	if (pDevEnum != NULL) pDevEnum->Release();
 	CoUninitialize();
-	
+
 	// Exit the program
 	exit(error);
 }
@@ -92,13 +92,16 @@ void exit_message(const char* error_message, int error)
 int main(int argc, char **argv)
 {
 	// Capture settings
+	int quiet = 0;
 	int snapshot_delay = 2000;
 	int show_preview_window = 0;
 	int list_devices = 0;
+	int list_devices_with_detail = 0;
 	int device_number = 1;
-	char device_name[100];
-	char filename[100];
-	
+	char device_name[255];
+	char device_serial[255];
+	char filename[255];
+
 	// Other variables
 	char char_buffer[100];
 
@@ -106,18 +109,33 @@ int main(int argc, char **argv)
 	strcpy(device_name, "");
 	strcpy(filename, "image.bmp");
 	
+	// First check if output messages should be suppressed
+	int n;
+	for (n=1 ; n < argc ; n++)
+	{
+		// Check next command line argument
+		if (strcmp(argv[n], "/quiet") == 0)
+		{
+			// Enable preview window
+			quiet = 1;
+		}
+	}
+	
 	// Information message
-	fprintf(stderr, "\n");
-	fprintf(stderr, "CommandCam  Copyright (C) 2012  Ted Burke\n");
-    fprintf(stderr, "This program comes with ABSOLUTELY NO WARRANTY;\n");
-    fprintf(stderr, "This is free software, and you are welcome to\n");
-    fprintf(stderr, "redistribute it under certain conditions;\n");
-	fprintf(stderr, "See the GNU General Public License v3,\n");
-	fprintf(stderr, "<http://www.gnu.org/licenses/gpl.txt>\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "http://batchloaf.wordpress.com\n");
-	fprintf(stderr, "This version 21-4-2012\n");
-	fprintf(stderr, "\n");
+	if (!quiet)
+	{
+		fprintf(stdout, "\n");
+		fprintf(stdout, "CommandCam  Copyright (C) 2012-2013 Ted Burke\n");
+		fprintf(stdout, "This program comes with ABSOLUTELY NO WARRANTY;\n");
+		fprintf(stdout, "This is free software, and you are welcome to\n");
+		fprintf(stdout, "redistribute it under certain conditions;\n");
+		fprintf(stdout, "See the GNU General Public License v3,\n");
+		fprintf(stdout, "<http://www.gnu.org/licenses/gpl.txt>\n");
+		fprintf(stdout, "\n");
+		fprintf(stdout, "https://batchloaf.wordpress.com/CommandCam\n");
+		fprintf(stdout, "This version 24-1-2013\n");
+		fprintf(stdout, "\n");
+	}
 	
 	// Parse command line arguments. Available options:
 	//
@@ -125,14 +143,20 @@ int main(int argc, char **argv)
 	//		/filename OUTPUT_FILENAME
 	//		/devnum DEVICE_NUMBER
 	//		/devname DEVICE_NAME
+	//		/devserial DEVICE_SERIAL_NUMBER
 	//		/preview
 	//		/devlist
 	//
-	int n = 1;
+	n = 1;
 	while (n < argc)
 	{
 		// Process next command line argument
-		if (strcmp(argv[n], "/preview") == 0)
+		if (strcmp(argv[n], "/quiet") == 0)
+		{
+			// This command line argument has already been
+			// processed above, so just ignore it now.
+		}
+		else if (strcmp(argv[n], "/preview") == 0)
 		{
 			// Enable preview window
 			show_preview_window = 1;
@@ -142,14 +166,20 @@ int main(int argc, char **argv)
 			// Set flag to list devices rather than capture image
 			list_devices = 1;
 		}
+		else if (strcmp(argv[n], "/devlistdetail") == 0)
+		{
+			// Set flag to list devices rather than capture image
+			list_devices = 1;
+			list_devices_with_detail = 1;
+		}
 		else if (strcmp(argv[n], "/filename") == 0)
 		{
 			// Set output filename to specified string
-			if (++n < argc) //strcpy(filename, argv[n]);
+			if (++n < argc)
 			{
 				// Copy provided string into char buffer
 				strcpy(char_buffer, argv[n]);
-				
+
 				// Trim inverted commas if present and copy
 				// provided string into filename char array
 				if (char_buffer[0] == '"')
@@ -167,19 +197,19 @@ int main(int argc, char **argv)
 		{
 			// Set snapshot delay to specified value
 			if (++n < argc) snapshot_delay = atoi(argv[n]);
-			else exit_message("Error: invalid delay specified", 1);
-			
+			else exit_message("Error: invalid delay specified", 2);
+
 			if (snapshot_delay <= 0)
-				exit_message("Error: invalid delay specified", 1);
+				exit_message("Error: invalid delay specified", 2);
 		}
 		else if (strcmp(argv[n], "/devnum") == 0)
 		{
 			// Set device number to specified value
 			if (++n < argc) device_number = atoi(argv[n]);
-			else exit_message("Error: invalid device number", 1);
-			
+			else exit_message("Error: invalid device number", 3);
+
 			if (device_number <= 0)
-				exit_message("Error: invalid device number", 1);
+				exit_message("Error: invalid device number", 3);
 		}
 		else if (strcmp(argv[n], "/devname") == 0)
 		{
@@ -188,7 +218,7 @@ int main(int argc, char **argv)
 			{
 				// Copy device name into char buffer
 				strcpy(char_buffer, argv[n]);
-				
+
 				// Trim inverted commas if present and copy
 				// provided string into device_name
 				if (char_buffer[0] == '"')
@@ -199,64 +229,88 @@ int main(int argc, char **argv)
 				{
 					strcpy(device_name, char_buffer);
 				}
-				
+
 				// Remember to choose by name rather than number
 				device_number = 0;
 			}
-			else exit_message("Error: invalid device name", 1);
+			else exit_message("Error: invalid device name", 4);
+		}
+		else if (strcmp(argv[n], "/devserial") == 0)
+		{
+			// Set device serial number to specified string
+			if (++n < argc)
+			{
+				// Copy device name into char buffer
+				strcpy(char_buffer, argv[n]);
+
+				// Trim inverted commas if present and copy
+				// provided string into device_serial
+				if (char_buffer[0] == '"')
+				{
+					strncat(device_serial, char_buffer, strlen(char_buffer)-2);
+				}
+				else
+				{
+					strcpy(device_serial, char_buffer);
+				}
+
+				// Remember to choose by serial number rather than number
+				device_number = 0;
+			}
+			else exit_message("Error: invalid device serial number", 5);
 		}
 		else
 		{
 			// Unknown command line argument
 			fprintf(stderr, "Unrecognised option: %s\n", argv[n]);
-			exit_message("", 1);			
+			exit_message("", 6);
 		}
-		
+
 		// Increment command line argument counter
 		n++;
 	}
-	
+
 	// Intialise COM
 	hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
 	if (hr != S_OK)
-		exit_message("Could not initialise COM", 1);
+		exit_message("Could not initialise COM", 7);
 
 	// Create filter graph
 	hr = CoCreateInstance(CLSID_FilterGraph, NULL,
 			CLSCTX_INPROC_SERVER, IID_IGraphBuilder,
 			(void**)&pGraph);
 	if (hr != S_OK)
-		exit_message("Could not create filter graph", 1);
-	
+		exit_message("Could not create filter graph", 8);
+
 	// Create capture graph builder.
 	hr = CoCreateInstance(CLSID_CaptureGraphBuilder2, NULL,
 			CLSCTX_INPROC_SERVER, IID_ICaptureGraphBuilder2,
 			(void **)&pBuilder);
 	if (hr != S_OK)
-		exit_message("Could not create capture graph builder", 1);
+		exit_message("Could not create capture graph builder", 9);
 
 	// Attach capture graph builder to graph
 	hr = pBuilder->SetFiltergraph(pGraph);
 	if (hr != S_OK)
-		exit_message("Could not attach capture graph builder to graph", 1);
+		exit_message("Could not attach capture graph builder to graph", 10);
 
 	// Create system device enumerator
 	hr = CoCreateInstance(CLSID_SystemDeviceEnum, NULL,
 			CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDevEnum));
 	if (hr != S_OK)
-		exit_message("Could not crerate system device enumerator", 1);
+		exit_message("Could not create system device enumerator", 11);
 
 	// Video input device enumerator
 	hr = pDevEnum->CreateClassEnumerator(
 					CLSID_VideoInputDeviceCategory, &pEnum, 0);
 	if (hr != S_OK)
-		exit_message("No video devices found", 1);
-	
+		exit_message("No video devices found", 12);
+
 	// If the user has included the "/list" command line
 	// argument, just list available devices, then exit.
 	if (list_devices != 0)
 	{
-		fprintf(stderr, "Available capture devices:\n");
+		if (!quiet) fprintf(stdout, "Available capture devices:\n");
 		n = 0;
 		while(1)
 		{
@@ -266,24 +320,35 @@ int main(int argc, char **argv)
 			{
 				// Increment device counter
 				n++;
-				
+
 				// Get device name
 				hr = pMoniker->BindToStorage(0, 0, IID_PPV_ARGS(&pPropBag));
 				VARIANT var;
+				// Retrieve and print device name
+				if (list_devices_with_detail)
+					if (!quiet) fprintf(stdout, "Capture device %d:\n", n);
 				VariantInit(&var);
 				hr = pPropBag->Read(L"FriendlyName", &var, 0);
-				fprintf(stderr, "  %d. %ls\n", n, var.bstrVal);
+				if (!quiet) fprintf(stdout, "  Device name: %ls\n", var.bstrVal);
 				VariantClear(&var);
+				// Retrieve and print device path
+				if (list_devices_with_detail)
+				{
+					VariantInit(&var);
+					hr = pPropBag->Read(L"DevicePath", &var, 0);
+					if (!quiet) fprintf(stdout, "  Device path: %ls\n\n", var.bstrVal);
+					VariantClear(&var);
+				}
 			}
 			else
 			{
 				// Finished listing device, so exit program
-				if (n == 0) exit_message("No devices found", 0);
+				if (n == 0) exit_message("No devices found", 13);
 				else exit_message("", 0);
 			}
 		}
 	}
-	
+
 	// Get moniker for specified video input device,
 	// or for the first device if no device number
 	// was specified.
@@ -311,10 +376,10 @@ int main(int argc, char **argv)
 					"Video capture device %d not found\n",
 					device_number);
 			}
-			exit_message("", 1);
+			exit_message("", 14);
 		}
-		
-		// If device was specified by name rather than number...
+
+		// If device was specified by name or serial number...
 		if (device_number == 0)
 		{
 			// Get video input device name
@@ -324,57 +389,69 @@ int main(int argc, char **argv)
 				// Get current device name
 				VariantInit(&var);
 				hr = pPropBag->Read(L"FriendlyName", &var, 0);
-				
+
 				// Convert to a normal C string, i.e. char*
 				sprintf(char_buffer, "%ls", var.bstrVal);
 				VariantClear(&var);
-				pPropBag->Release();
-				pPropBag = NULL;
-				
+
 				// Exit loop if current device name matched devname
 				if (strcmp(device_name, char_buffer) == 0) break;
+
+				// Get current device path
+				VariantInit(&var);
+				hr = pPropBag->Read(L"DevicePath", &var, 0);
+
+				// Convert to a normal C string, i.e. char*
+				sprintf(char_buffer, "%ls", var.bstrVal);
+				VariantClear(&var);
+				
+				pPropBag->Release();
+				pPropBag = NULL;
+
+				// Exit loop if specified serial number appears in DevicePath
+				if (strlen(device_serial) && strstr(char_buffer, device_serial)) break;
 			}
 			else
 			{
-				exit_message("Error getting device names", 1);
+				exit_message("Error getting device name and DevicePath", 15);
 			}
 		}
 		else if (n >= device_number) break;
 	}
-	
+
 	// Get video input device name
 	hr = pMoniker->BindToStorage(0, 0, IID_PPV_ARGS(&pPropBag));
 	VariantInit(&var);
 	hr = pPropBag->Read(L"FriendlyName", &var, 0);
-	fprintf(stderr, "Capture device: %ls\n", var.bstrVal);
+	if (!quiet) fprintf(stdout, "Capture device: %ls\n", var.bstrVal);
 	VariantClear(&var);
-	
+
 	// Create capture filter and add to graph
 	hr = pMoniker->BindToObject(0, 0,
 					IID_IBaseFilter, (void**)&pCap);
-	if (hr != S_OK) exit_message("Could not create capture filter", 1);
-		
+	if (hr != S_OK) exit_message("Could not create capture filter", 16);
+
 	// Add capture filter to graph
 	hr = pGraph->AddFilter(pCap, L"Capture Filter");
-	if (hr != S_OK) exit_message("Could not add capture filter to graph", 1);
+	if (hr != S_OK) exit_message("Could not add capture filter to graph", 17);
 
 	// Create sample grabber filter
 	hr = CoCreateInstance(CLSID_SampleGrabber, NULL,
 		CLSCTX_INPROC_SERVER, IID_IBaseFilter,
 		(void**)&pSampleGrabberFilter);
 	if (hr != S_OK)
-		exit_message("Could not create Sample Grabber filter", 1);
-	
+		exit_message("Could not create Sample Grabber filter", 18);
+
 	// Query the ISampleGrabber interface of the sample grabber filter
 	hr = pSampleGrabberFilter->QueryInterface(
 			DexterLib::IID_ISampleGrabber, (void**)&pSampleGrabber);
 	if (hr != S_OK)
-		exit_message("Could not get ISampleGrabber interface to sample grabber filter", 1);
-	
+		exit_message("Could not get ISampleGrabber interface to sample grabber filter", 19);
+
 	// Enable sample buffering in the sample grabber filter
 	hr = pSampleGrabber->SetBufferSamples(TRUE);
 	if (hr != S_OK)
-		exit_message("Could not enable sample buffering in the sample grabber", 1);
+		exit_message("Could not enable sample buffering in the sample grabber", 20);
 
 	// Set media type in sample grabber filter
 	AM_MEDIA_TYPE mt;
@@ -383,32 +460,32 @@ int main(int argc, char **argv)
 	mt.subtype = MEDIASUBTYPE_RGB24;
 	hr = pSampleGrabber->SetMediaType((DexterLib::_AMMediaType *)&mt);
 	if (hr != S_OK)
-		exit_message("Could not set media type in sample grabber", 1);
-	
+		exit_message("Could not set media type in sample grabber", 21);
+
 	// Add sample grabber filter to filter graph
 	hr = pGraph->AddFilter(pSampleGrabberFilter, L"SampleGrab");
 	if (hr != S_OK)
-		exit_message("Could not add Sample Grabber to filter graph", 1);
+		exit_message("Could not add Sample Grabber to filter graph", 22);
 
 	// Create Null Renderer filter
 	hr = CoCreateInstance(CLSID_NullRenderer, NULL,
 		CLSCTX_INPROC_SERVER, IID_IBaseFilter,
 		(void**)&pNullRenderer);
 	if (hr != S_OK)
-		exit_message("Could not create Null Renderer filter", 1);
-	
+		exit_message("Could not create Null Renderer filter", 23);
+
 	// Add Null Renderer filter to filter graph
 	hr = pGraph->AddFilter(pNullRenderer, L"NullRender");
 	if (hr != S_OK)
-		exit_message("Could not add Null Renderer to filter graph", 1);
-	
+		exit_message("Could not add Null Renderer to filter graph", 24);
+
 	// Connect up the filter graph's capture stream
 	hr = pBuilder->RenderStream(
 		&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video,
 		pCap,  pSampleGrabberFilter, pNullRenderer);
 	if (hr != S_OK)
-		exit_message("Could not render capture video stream", 1);
-		
+		exit_message("Could not render capture video stream", 25);
+
 	// Connect up the filter graph's preview stream
 	if (show_preview_window > 0)
 	{
@@ -416,32 +493,32 @@ int main(int argc, char **argv)
 				&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
 				pCap, NULL, NULL);
 		if (hr != S_OK && hr != VFW_S_NOPREVIEWPIN)
-			exit_message("Could not render preview video stream", 1);
+			exit_message("Could not render preview video stream", 26);
 	}
 
 	// Get media control interfaces to graph builder object
 	hr = pGraph->QueryInterface(IID_IMediaControl,
 					(void**)&pMediaControl);
-	if (hr != S_OK) exit_message("Could not get media control interface", 1);
-	
+	if (hr != S_OK) exit_message("Could not get media control interface", 27);
+
 	// Run graph
 	while(1)
 	{
 		hr = pMediaControl->Run();
-		
+
 		// Hopefully, the return value was S_OK or S_FALSE
 		if (hr == S_OK) break; // graph is now running
 		if (hr == S_FALSE) continue; // graph still preparing to run
-		
+
 		// If the Run function returned something else,
 		// there must be a problem
 		fprintf(stderr, "Error: %u\n", hr);
-		exit_message("Could not run filter graph", 1);
+		exit_message("Could not run filter graph", 28);
 	}
-	
+
 	// Wait for specified time delay (if any)
 	Sleep(snapshot_delay);
-	
+
 	// Grab a sample
 	// First, find the required buffer size
 	long buffer_size = 0;
@@ -450,16 +527,16 @@ int main(int argc, char **argv)
 		// Passing in a NULL pointer signals that we're just checking
 		// the required buffer size; not looking for actual data yet.
 		hr = pSampleGrabber->GetCurrentBuffer(&buffer_size, NULL);
-		
+
 		// Keep trying until buffer_size is set to non-zero value.
 		if (hr == S_OK && buffer_size != 0) break;
-		
+
 		// If the return value isn't S_OK or VFW_E_WRONG_STATE
 		// then something has gone wrong. VFW_E_WRONG_STATE just
 		// means that the filter graph is still starting up and
 		// no data has arrived yet in the sample grabber filter.
 		if (hr != S_OK && hr != VFW_E_WRONG_STATE)
-			exit_message("Could not get buffer size", 1);
+			exit_message("Could not get buffer size", 29);
 	}
 
 	// Stop the graph
@@ -468,33 +545,33 @@ int main(int argc, char **argv)
 	// Allocate buffer for image
 	pBuffer = new char[buffer_size];
 	if (!pBuffer)
-		exit_message("Could not allocate data buffer for image", 1);
-	
+		exit_message("Could not allocate data buffer for image", 30);
+
 	// Retrieve image data from sample grabber buffer
 	hr = pSampleGrabber->GetCurrentBuffer(
 			&buffer_size, (long*)pBuffer);
 	if (hr != S_OK)
-		exit_message("Could not get buffer data from sample grabber", 1);
+		exit_message("Could not get buffer data from sample grabber", 31);
 
 	// Get the media type from the sample grabber filter
 	hr = pSampleGrabber->GetConnectedMediaType(
 			(DexterLib::_AMMediaType *)&mt);
-	if (hr != S_OK) exit_message("Could not get media type", 1);
-	
+	if (hr != S_OK) exit_message("Could not get media type", 32);
+
 	// Retrieve format information
 	VIDEOINFOHEADER *pVih = NULL;
-	if ((mt.formattype == FORMAT_VideoInfo) && 
+	if ((mt.formattype == FORMAT_VideoInfo) &&
 		(mt.cbFormat >= sizeof(VIDEOINFOHEADER)) &&
-		(mt.pbFormat != NULL)) 
+		(mt.pbFormat != NULL))
 	{
 		// Get video info header structure from media type
 		pVih = (VIDEOINFOHEADER*)mt.pbFormat;
 
 		// Print the resolution of the captured image
-		fprintf(stderr, "Capture resolution: %dx%d\n",
+		if (!quiet) fprintf(stdout, "Capture resolution: %dx%d\n",
 			pVih->bmiHeader.biWidth,
 			pVih->bmiHeader.biHeight);
-		
+
 		// Create bitmap structure
 		long cbBitmapInfoSize = mt.cbFormat - SIZE_PREHEADER;
 		BITMAPFILEHEADER bfh;
@@ -502,28 +579,28 @@ int main(int argc, char **argv)
 		bfh.bfType = 'MB'; // Little-endian for "BM".
 		bfh.bfSize = sizeof(bfh) + buffer_size + cbBitmapInfoSize;
 		bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + cbBitmapInfoSize;
-		
+
 		// Open output file
 		HANDLE hf = CreateFile(filename, GENERIC_WRITE,
 					FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, 0, NULL);
 		if (hf == INVALID_HANDLE_VALUE)
-			exit_message("Error opening output file", 1);
-		
+			exit_message("Error opening output file", 33);
+
 		// Write the file header.
 		DWORD dwWritten = 0;
 		WriteFile(hf, &bfh, sizeof(bfh), &dwWritten, NULL);
 		WriteFile(hf, HEADER(pVih),
 					cbBitmapInfoSize, &dwWritten, NULL);
-		
+
 		// Write pixel data to file
 		WriteFile(hf, pBuffer, buffer_size, &dwWritten, NULL);
 		CloseHandle(hf);
 	}
-	else 
+	else
 	{
-		exit_message("Wrong media type", 1);
+		exit_message("Wrong media type", 34);
 	}
-	
+
 	// Free the format block
 	if (mt.cbFormat != 0)
 	{
@@ -539,6 +616,6 @@ int main(int argc, char **argv)
 	}
 
 	// Clean up and exit
-	fprintf(stderr, "Captured image to %s", filename);
+	if (!quiet) fprintf(stdout, "Captured image to %s", filename);
 	exit_message("", 0);
 }
